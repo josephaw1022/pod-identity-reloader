@@ -89,6 +89,15 @@ make test-e2e   # E2e tests against an isolated Kind cluster
 
 Never run e2e tests against a real development or production cluster.
 
+`make test-e2e` reuses the local development tooling under `hack/local-dev/`:
+it creates an isolated Kind cluster (`hack/local-dev/kind-up.sh`), and the
+Ginkgo suite deploys MiniStack into it, deploys the controller pointed at
+MiniStack, and seeds a sample IAM role/EKS cluster/Pod Identity Association
+(`hack/local-dev/seed-aws.sh`). One test rotates the sample role
+(`hack/local-dev/rotate-sample-role.sh`) and asserts the controller detects
+the change and triggers a rollout. See `test/e2e/e2e_test.go` and
+`test/e2e/testdata/sample-workload.yaml`.
+
 ## Conventions
 
 - Represent status with `metav1.Condition`, not custom string fields.

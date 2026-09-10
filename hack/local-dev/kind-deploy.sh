@@ -37,22 +37,8 @@ kubectl -n "${CONTROLLER_NAMESPACE}" patch deployment pod-identity-reloader-cont
 	--type=json \
 	-p="[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args/3\",\"value\":\"--cluster-name=${LOCAL_DEV_CLUSTER_NAME}\"}]"
 
-log "Waiting for MiniStack to be reachable from the host to seed AWS resources..."
-kubectl -n "${MINISTACK_NAMESPACE}" port-forward svc/"${MINISTACK_SERVICE_NAME}" 4566:4566 >/tmp/pod-identity-reloader-ministack-pf.log 2>&1 &
-PF_PID=$!
-trap 'kill "${PF_PID}" >/dev/null 2>&1 || true' EXIT
-
-for _ in $(seq 1 30); do
-	if curl -fsS "http://localhost:4566/_ministack/health" >/dev/null 2>&1; then
-		break
-	fi
-	sleep 1
-done
-
-"${SCRIPT_DIR}/seed-aws.sh"
-
-kill "${PF_PID}" >/dev/null 2>&1 || true
-trap - EXIT
+log "Seeding MiniStack with a sample IAM role, EKS cluster, and Pod Identity Association..."
+"${SCRIPT_DIR}/with-ministack-portforward.sh" "${SCRIPT_DIR}/seed-aws.sh"
 
 log "Waiting for the controller to become ready..."
 kubectl -n "${CONTROLLER_NAMESPACE}" rollout status deployment/pod-identity-reloader-controller-manager --timeout=120s

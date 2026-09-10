@@ -10,6 +10,9 @@
     - --leader-elect
     - --health-probe-bind-address=:8081
     - --cluster-name=pod-identity-reloader-local
+    # Faster than the 30s production default so local dev/e2e feedback loops
+    # (e.g. rotating the sample role) don't require long waits.
+    - --poll-interval=5s
 - op: add
   path: /spec/template/spec/containers/0/env
   value:

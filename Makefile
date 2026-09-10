@@ -94,6 +94,31 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+##@ Local Development
+
+# See hack/local-dev/env.sh for the shared configuration (cluster name,
+# MiniStack image/ports, seeded IAM role, etc.) used by all local-* targets.
+
+.PHONY: local-up
+local-up: ## Start MiniStack in Docker and seed it with a sample IAM role/EKS cluster/Pod Identity Association.
+	hack/local-dev/local-up.sh
+
+.PHONY: local-down
+local-down: ## Stop and remove the local MiniStack container.
+	hack/local-dev/local-down.sh
+
+.PHONY: local-run
+local-run: manifests generate fmt vet ## Run the manager locally against the MiniStack container started by 'make local-up'.
+	hack/local-dev/local-run.sh
+
+.PHONY: local-kind-deploy
+local-kind-deploy: manifests ## Full local deployment: Kind cluster + in-cluster MiniStack + locally built controller image, seeded and applied.
+	hack/local-dev/kind-deploy.sh
+
+.PHONY: local-kind-down
+local-kind-down: ## Delete the local Kind cluster created by 'make local-kind-deploy'.
+	hack/local-dev/kind-down.sh
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run

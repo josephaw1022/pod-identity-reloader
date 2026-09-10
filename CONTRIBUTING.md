@@ -47,6 +47,39 @@ make lint-fix   # Run golangci-lint with auto-fix
 Run the linter's auto-fix and the full unit test suite before considering
 any Go change complete.
 
+### Local development against MiniStack
+
+This project has no dependency on a real AWS account for local development.
+[MiniStack](https://github.com/ministackorg/ministack) is a free,
+open-source AWS emulator used as a stand-in EKS/IAM API. See
+`hack/local-dev/env.sh` for the shared configuration (cluster name,
+MiniStack image/ports, seeded IAM role/namespace/service account).
+
+Two flows are available:
+
+**Fast loop — run the manager as a local Go process:**
+
+```sh
+make local-up    # Start MiniStack in Docker; seed an IAM role, EKS cluster, and Pod Identity Association
+make local-run   # go run the manager against MiniStack (--cluster-name matches the seeded cluster)
+make local-down  # Stop and remove the MiniStack container
+```
+
+**Full loop — Kind cluster with MiniStack and the controller deployed in-cluster:**
+
+```sh
+make local-kind-deploy  # Kind cluster + in-cluster MiniStack + locally built/loaded controller image, manifests applied
+make local-kind-down    # Delete the Kind cluster
+```
+
+`local-kind-deploy` builds the manager image, loads it into Kind, deploys
+MiniStack under `config/local-dev/ministack`, deploys the operator via the
+`config/local-dev/controller` kustomize overlay (which points
+`AWS_ENDPOINT_URL` at the in-cluster MiniStack service), and seeds MiniStack
+with a matching `--cluster-name`. The seeded cluster name always matches the
+`--cluster-name` the controller is started with — see
+`hack/local-dev/seed-aws.sh` and `config/local-dev/controller/manager_local_dev_patch.yaml`.
+
 ## Testing
 
 ```sh

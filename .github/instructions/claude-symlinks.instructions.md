@@ -1,0 +1,1 @@
+../../.agents/rules/claude-symlinks.instructions.md

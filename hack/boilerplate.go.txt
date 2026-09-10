@@ -1,0 +1,5 @@
+/*
+Copyright YEAR Joseph Whiteaker.
+
+Licensed under the MIT License. See LICENSE for details.
+*/

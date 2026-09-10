@@ -1,0 +1,12 @@
+resources:
+  - ../../default
+
+images:
+  - name: controller
+    newTag: local-dev
+
+patches:
+  - path: manager_local_dev_patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: control-plane=controller-manager

@@ -1,0 +1,23 @@
+# Replaces the whole args list (rather than a single index) because
+# config/default/manager_metrics_patch.yaml inserts an extra arg ahead of
+# these, which would otherwise shift index-based patches. Keep this in sync
+# with config/manager/manager.yaml's health-probe flag and
+# config/default/manager_metrics_patch.yaml's metrics flag.
+- op: replace
+  path: /spec/template/spec/containers/0/args
+  value:
+    - --metrics-bind-address=:8443
+    - --leader-elect
+    - --health-probe-bind-address=:8081
+    - --cluster-name=pod-identity-reloader-local
+- op: add
+  path: /spec/template/spec/containers/0/env
+  value:
+    - name: AWS_ENDPOINT_URL
+      value: http://ministack.ministack-system.svc.cluster.local:4566
+    - name: AWS_ACCESS_KEY_ID
+      value: "000000000000"
+    - name: AWS_SECRET_ACCESS_KEY
+      value: ministack
+    - name: AWS_REGION
+      value: us-east-1

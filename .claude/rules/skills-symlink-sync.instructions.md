@@ -1,0 +1,1 @@
+../../.agents/rules/skills-symlink-sync.instructions.md

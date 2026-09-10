@@ -35,12 +35,33 @@ const metricsServiceName = "pod-identity-reloader-controller-manager-metrics-ser
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "pod-identity-reloader-metrics-binding"
 
+// controllerDeploymentName is the name of the controller-manager Deployment
+// once the config/local-dev/controller kustomize overlay's namePrefix is applied.
+const controllerDeploymentName = "pod-identity-reloader-controller-manager"
+
+// ministackNamespace/ministackDeploymentName match config/local-dev/ministack.
+const ministackNamespace = "ministack-system"
+const ministackDeploymentName = "ministack"
+
+// sampleWorkloadManifest is applied to exercise the controller's core
+// reconciliation path (see hack/local-dev/env.sh for the namespace/service
+// account it must match, which hack/local-dev/seed-aws.sh seeds a Pod
+// Identity Association for).
+const sampleWorkloadManifest = "test/e2e/testdata/sample-workload.yaml"
+const sampleWorkloadNamespace = "default"
+const sampleDeploymentName = "pod-identity-reloader-sample"
+
+// roleARNHashAnnotation is written on the pod template by the controller;
+// must match internal/controller.RoleARNHashAnnotation.
+const roleARNHashAnnotation = "pod-identity-reloader.dev/role-arn-hash"
+
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
-	// Before running the tests, set up the environment by creating the namespace,
-	// enforce the restricted security policy to the namespace, installing CRDs,
-	// and deploying the controller.
+	// Before running the tests, set up the environment: create the manager
+	// namespace, deploy MiniStack into the cluster as a stand-in AWS/EKS API,
+	// deploy the controller pointed at it, and seed MiniStack with a sample
+	// IAM role, EKS cluster, and Pod Identity Association.
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
@@ -53,30 +74,52 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("installing CRDs")
-		cmd = exec.Command("make", "install")
+		By("deploying MiniStack")
+		cmd = exec.Command("kubectl", "apply", "-k", "config/local-dev/ministack")
 		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
+		Expect(err).NotTo(HaveOccurred(), "Failed to deploy MiniStack")
 
-		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", managerImage))
+		By("waiting for MiniStack to become ready")
+		cmd = exec.Command("kubectl", "-n", ministackNamespace, "rollout", "status",
+			fmt.Sprintf("deployment/%s", ministackDeploymentName), "--timeout=120s")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "MiniStack did not become ready")
+
+		By("deploying the controller-manager against MiniStack")
+		cmd = exec.Command("kubectl", "apply", "-k", "config/local-dev/controller")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("pointing the controller-manager at the locally built image")
+		cmd = exec.Command("kubectl", "-n", namespace, "set", "image",
+			fmt.Sprintf("deployment/%s", controllerDeploymentName),
+			fmt.Sprintf("manager=%s", managerImage))
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to set the controller-manager image")
+
+		By("seeding MiniStack with a sample IAM role, EKS cluster, and Pod Identity Association")
+		cmd = exec.Command("hack/local-dev/with-ministack-portforward.sh", "hack/local-dev/seed-aws.sh")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to seed MiniStack")
 	})
 
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
+	// After all tests have been executed, clean up the sample workload, the
+	// controller, MiniStack, and the manager namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = utils.Run(cmd)
 
-		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
+		By("removing the sample workload")
+		cmd = exec.Command("kubectl", "delete", "-f", sampleWorkloadManifest, "--ignore-not-found=true")
 		_, _ = utils.Run(cmd)
 
-		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
+		By("undeploying the controller-manager")
+		cmd = exec.Command("kubectl", "delete", "-k", "config/local-dev/controller", "--ignore-not-found=true")
+		_, _ = utils.Run(cmd)
+
+		By("undeploying MiniStack")
+		cmd = exec.Command("kubectl", "delete", "-k", "config/local-dev/ministack", "--ignore-not-found=true")
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")
@@ -260,17 +303,43 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should trigger a rollout when the Pod Identity Association's role changes", func() {
+			By("applying the sample workload")
+			cmd := exec.Command("kubectl", "apply", "-f", sampleWorkloadManifest)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply the sample workload")
+
+			By("waiting for the controller to write the initial role-arn-hash annotation")
+			var initialHash string
+			Eventually(func(g Gomega) {
+				hash, err := sampleDeploymentAnnotation(roleARNHashAnnotation)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).NotTo(BeEmpty(), "expected role-arn-hash annotation to be set")
+				initialHash = hash
+			}, 2*time.Minute).Should(Succeed())
+
+			By("rotating the IAM role bound via the Pod Identity Association")
+			cmd = exec.Command("hack/local-dev/with-ministack-portforward.sh", "hack/local-dev/rotate-sample-role.sh")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to rotate the sample role")
+
+			By("waiting for the controller to detect the role change and trigger a rollout")
+			Eventually(func(g Gomega) {
+				hash, err := sampleDeploymentAnnotation(roleARNHashAnnotation)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).NotTo(Equal(initialHash), "expected role-arn-hash annotation to change after role rotation")
+			}, 2*time.Minute).Should(Succeed())
+		})
 	})
 })
+
+// sampleDeploymentAnnotation returns the value of the given annotation on
+// the sample Deployment's pod template.
+func sampleDeploymentAnnotation(key string) (string, error) {
+	cmd := exec.Command("kubectl", "get", "deployment", sampleDeploymentName, "-n", sampleWorkloadNamespace,
+		"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", key))
+	return utils.Run(cmd)
+}
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request

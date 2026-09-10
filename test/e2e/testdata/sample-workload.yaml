@@ -1,0 +1,32 @@
+# Sample workload used by the e2e suite to exercise the controller's core
+# reconciliation path against MiniStack. The namespace and ServiceAccount
+# name must match hack/local-dev/env.sh's LOCAL_DEV_NAMESPACE and
+# LOCAL_DEV_SERVICE_ACCOUNT, which is what hack/local-dev/seed-aws.sh seeds
+# a Pod Identity Association for.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-identity-reloader-sample
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-identity-reloader-sample
+  namespace: default
+  annotations:
+    pod-identity-reloader.dev/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-identity-reloader-sample
+  template:
+    metadata:
+      labels:
+        app: pod-identity-reloader-sample
+    spec:
+      serviceAccountName: pod-identity-reloader-sample
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9

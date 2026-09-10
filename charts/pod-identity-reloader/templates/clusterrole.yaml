@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "pod-identity-reloader.fullname" . }}
+  labels:
+    {{- include "pod-identity-reloader.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "deployments", "statefulsets"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets/finalizers", "deployments/finalizers", "statefulsets/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets/status", "deployments/status", "statefulsets/status"]
+    verbs: ["get", "patch", "update"]

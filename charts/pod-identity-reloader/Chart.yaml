@@ -1,0 +1,9 @@
+apiVersion: v2
+name: pod-identity-reloader
+description: A Kubernetes operator that reloads workloads when their EKS Pod Identity role changes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/josephaw1022/pod-identity-reloader
+sources:
+  - https://github.com/josephaw1022/pod-identity-reloader

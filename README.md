@@ -26,7 +26,7 @@ rollout so pods pick up the new role automatically.
 
 ```sh
 helm install pod-identity-reloader \
-  oci://ghcr.io/josephaw1022/pod-identity-reloader \
+  oci://ghcr.io/josephaw1022/charts/pod-identity-reloader \
   --version <version> \
   --set clusterName=<your-eks-cluster-name>
 ```
@@ -34,7 +34,7 @@ helm install pod-identity-reloader \
 ### Kustomize
 
 ```sh
-make deploy IMG=ghcr.io/josephaw1022/pod-identity-reloader:<tag>
+make deploy IMG=ghcr.io/josephaw1022/pod-identity-reloader:sha-<short-sha>
 ```
 
 Set `--cluster-name=<your-eks-cluster-name>` in `config/manager/manager.yaml`

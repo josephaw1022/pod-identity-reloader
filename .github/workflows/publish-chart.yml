@@ -2,8 +2,8 @@ name: Publish Helm chart
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
     paths:
       - "charts/pod-identity-reloader/**"
       - ".github/workflows/publish-chart.yml"
@@ -34,8 +34,10 @@ jobs:
 
       - name: Package and publish chart
         env:
-          CHART_VERSION: ${{ startsWith(github.ref_name, 'v') && github.ref_name || '0.1.0' }}
+          SHA: ${{ github.sha }}
         run: |
-          version="${CHART_VERSION#v}"
-          helm package charts/pod-identity-reloader --version "$version" --app-version "$version"
-          helm push "pod-identity-reloader-${version}.tgz" "oci://ghcr.io/${{ github.repository_owner }}"
+          short_sha="${SHA:0:7}"
+          version="0.0.0-sha.${short_sha}"
+          app_version="sha-${short_sha}"
+          helm package charts/pod-identity-reloader --version "$version" --app-version "$app_version"
+          helm push "pod-identity-reloader-${version}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"

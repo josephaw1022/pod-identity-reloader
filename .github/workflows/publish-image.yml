@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
+    paths-ignore:
+      - "charts/**"
+      - "**.md"
   workflow_dispatch:
 
 permissions: {}
@@ -32,7 +33,10 @@ jobs:
 
       - name: Build and publish image
         env:
-          IMAGE: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          IMAGE: ghcr.io/${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
-          docker build --tag "$IMAGE" .
-          docker push "$IMAGE"
+          short_sha="${SHA:0:7}"
+          docker build --tag "$IMAGE:sha-${short_sha}" --tag "$IMAGE:latest" .
+          docker push "$IMAGE:sha-${short_sha}"
+          docker push "$IMAGE:latest"

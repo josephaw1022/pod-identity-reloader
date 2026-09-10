@@ -26,15 +26,15 @@ const (
 	// AutoReloadAnnotation opts a workload into pod-identity-reloader. Set it
 	// to "true" on a Deployment/StatefulSet/DaemonSet to have its pods
 	// restarted whenever the IAM role bound to its ServiceAccount changes.
-	AutoReloadAnnotation = "pod-identity-reloader.josephaw1022.dev/auto"
+	AutoReloadAnnotation = "pod-identity-reloader.dev/auto"
 
 	// RoleARNHashAnnotation is written on the pod template and stores the
 	// hash of the last observed IAM role ARN.
-	RoleARNHashAnnotation = "pod-identity-reloader.josephaw1022.dev/role-arn-hash"
+	RoleARNHashAnnotation = "pod-identity-reloader.dev/role-arn-hash"
 
 	// RestartedAtAnnotation is written on the pod template to force a
 	// rollout, mirroring `kubectl rollout restart`.
-	RestartedAtAnnotation = "pod-identity-reloader.josephaw1022.dev/restarted-at"
+	RestartedAtAnnotation = "pod-identity-reloader.dev/restarted-at"
 
 	// defaultPollInterval controls how often a tracked workload is
 	// re-checked against the EKS Pod Identity Association API, since role

@@ -37,8 +37,11 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           short_sha="${SHA:0:7}"
-          chart_version="$(grep '^version:' charts/pod-identity-reloader/Chart.yaml | awk '{print $2}')"
-          version="${chart_version}-sha.${short_sha}"
-          app_version="sha-${short_sha}"
-          helm package charts/pod-identity-reloader --version "$version" --app-version "$app_version"
+          # Helm requires a numeric X.Y.Z semver, so encode the sha's hex bytes as the version numbers
+          sha6="${SHA:0:6}"
+          major=$((16#${sha6:0:2}))
+          minor=$((16#${sha6:2:2}))
+          patch=$((16#${sha6:4:2}))
+          version="${major}.${minor}.${patch}"
+          helm package charts/pod-identity-reloader --version "$version" --app-version "$short_sha"
           helm push "pod-identity-reloader-${version}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"

@@ -31,10 +31,11 @@ helm install pod-identity-reloader \
   --set clusterName=<your-eks-cluster-name>
 ```
 
-### Kustomize
+### kubectl apply
 
 ```sh
-make deploy IMG=ghcr.io/josephaw1022/pod-identity-reloader:sha-<short-sha>
+make build-installer IMG=ghcr.io/josephaw1022/pod-identity-reloader:sha-<short-sha>
+kubectl apply -f dist/install.yaml
 ```
 
 Set `--cluster-name=<your-eks-cluster-name>` in `config/manager/manager.yaml`
@@ -66,8 +67,8 @@ a full example.
 
 ```sh
 helm uninstall pod-identity-reloader
-# or, if installed via Kustomize
-make undeploy
+# or, if installed via kubectl apply
+kubectl delete -f dist/install.yaml
 ```
 
 ## Contributing

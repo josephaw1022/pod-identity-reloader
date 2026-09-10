@@ -58,7 +58,8 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 	var clusterName string
 	var pollInterval time.Duration
-	flag.StringVar(&clusterName, "cluster-name", "", "The EKS cluster name to query for Pod Identity Associations (required).")
+	flag.StringVar(&clusterName, "cluster-name", "",
+		"The EKS cluster name to query for Pod Identity Associations (required).")
 	flag.DurationVar(&pollInterval, "poll-interval", 30*time.Second,
 		"How often to re-check a tracked workload's IAM role against the EKS Pod Identity Association API.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+

@@ -24,12 +24,16 @@ type fakeEKSAPI struct {
 	lastDescIn  *eks.DescribePodIdentityAssociationInput
 }
 
-func (f *fakeEKSAPI) ListPodIdentityAssociations(_ context.Context, params *eks.ListPodIdentityAssociationsInput, _ ...func(*eks.Options)) (*eks.ListPodIdentityAssociationsOutput, error) {
+func (f *fakeEKSAPI) ListPodIdentityAssociations(
+	_ context.Context, params *eks.ListPodIdentityAssociationsInput, _ ...func(*eks.Options),
+) (*eks.ListPodIdentityAssociationsOutput, error) {
 	f.lastListIn = params
 	return f.listOutput, f.listErr
 }
 
-func (f *fakeEKSAPI) DescribePodIdentityAssociation(_ context.Context, params *eks.DescribePodIdentityAssociationInput, _ ...func(*eks.Options)) (*eks.DescribePodIdentityAssociationOutput, error) {
+func (f *fakeEKSAPI) DescribePodIdentityAssociation(
+	_ context.Context, params *eks.DescribePodIdentityAssociationInput, _ ...func(*eks.Options),
+) (*eks.DescribePodIdentityAssociationOutput, error) {
 	f.lastDescIn = params
 	return f.describeOut, f.describeErr
 }

@@ -29,8 +29,12 @@ type Lookup interface {
 // EKSAPI is the subset of the EKS SDK client used by EKSLookup, narrowed for
 // easier testing.
 type EKSAPI interface {
-	ListPodIdentityAssociations(ctx context.Context, params *eks.ListPodIdentityAssociationsInput, optFns ...func(*eks.Options)) (*eks.ListPodIdentityAssociationsOutput, error)
-	DescribePodIdentityAssociation(ctx context.Context, params *eks.DescribePodIdentityAssociationInput, optFns ...func(*eks.Options)) (*eks.DescribePodIdentityAssociationOutput, error)
+	ListPodIdentityAssociations(
+		ctx context.Context, params *eks.ListPodIdentityAssociationsInput, optFns ...func(*eks.Options),
+	) (*eks.ListPodIdentityAssociationsOutput, error)
+	DescribePodIdentityAssociation(
+		ctx context.Context, params *eks.DescribePodIdentityAssociationInput, optFns ...func(*eks.Options),
+	) (*eks.DescribePodIdentityAssociationOutput, error)
 }
 
 // EKSLookup implements Lookup using the real EKS API.

@@ -41,13 +41,17 @@ const (
 	// reassignment happens outside the Kubernetes API and produces no watch
 	// event.
 	defaultPollInterval = 30 * time.Second
+
+	// annotationValueTrue is the opt-in value expected on
+	// AutoReloadAnnotation.
+	annotationValueTrue = "true"
 )
 
 // autoReloadEnabled matches objects opted into reloading via
 // AutoReloadAnnotation, keeping the controllers from reconciling every
 // workload in the cluster.
 var autoReloadEnabled = predicate.NewPredicateFuncs(func(obj client.Object) bool {
-	return obj.GetAnnotations()[AutoReloadAnnotation] == "true"
+	return obj.GetAnnotations()[AutoReloadAnnotation] == annotationValueTrue
 })
 
 // podTemplate is implemented by the workload kinds this controller supports,
@@ -91,7 +95,7 @@ func serviceAccountName(tpl *corev1.PodTemplateSpec) string {
 func reloadIfRoleChanged(ctx context.Context, c client.Client, lookup podidentity.Lookup, clusterName string, interval time.Duration, wl podTemplate) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	if wl.GetAnnotations()[AutoReloadAnnotation] != "true" {
+	if wl.GetAnnotations()[AutoReloadAnnotation] != annotationValueTrue {
 		return ctrl.Result{}, nil
 	}
 

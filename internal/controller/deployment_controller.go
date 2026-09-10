@@ -26,6 +26,7 @@ import (
 type deploymentWorkload struct{ *appsv1.Deployment }
 
 func (w *deploymentWorkload) template() *corev1.PodTemplateSpec { return &w.Spec.Template }
+func (w *deploymentWorkload) object() client.Object             { return w.Deployment }
 
 // DeploymentReconciler restarts Deployments whose ServiceAccount's EKS Pod
 // Identity Association IAM role has changed since it was last observed.

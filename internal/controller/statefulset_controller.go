@@ -26,6 +26,7 @@ import (
 type statefulsetWorkload struct{ *appsv1.StatefulSet }
 
 func (w *statefulsetWorkload) template() *corev1.PodTemplateSpec { return &w.Spec.Template }
+func (w *statefulsetWorkload) object() client.Object             { return w.StatefulSet }
 
 // StatefulSetReconciler restarts StatefulSets whose ServiceAccount's EKS Pod Identity
 // Association IAM role has changed since it was last observed.

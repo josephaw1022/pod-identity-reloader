@@ -26,6 +26,7 @@ import (
 type daemonsetWorkload struct{ *appsv1.DaemonSet }
 
 func (w *daemonsetWorkload) template() *corev1.PodTemplateSpec { return &w.Spec.Template }
+func (w *daemonsetWorkload) object() client.Object             { return w.DaemonSet }
 
 // DaemonSetReconciler restarts DaemonSets whose ServiceAccount's EKS Pod Identity
 // Association IAM role has changed since it was last observed.

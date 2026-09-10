@@ -1,0 +1,26 @@
+# Opt a Deployment into pod-identity-reloader by adding the auto annotation.
+# When the IAM role bound to `my-service-account` via an EKS Pod Identity
+# Association changes, pod-identity-reloader patches the pod template with a
+# `restarted-at` annotation, triggering a rollout — the same effect as
+# `kubectl rollout restart deployment/my-app`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: default
+  annotations:
+    pod-identity-reloader.josephaw1022.dev/auto: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      serviceAccountName: my-service-account
+      containers:
+        - name: my-app
+          image: my-app:latest

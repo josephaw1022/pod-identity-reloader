@@ -58,6 +58,10 @@ type podTemplate interface {
 	// template returns a pointer to the embedded pod template so its
 	// annotations can be read and patched in place.
 	template() *corev1.PodTemplateSpec
+	// object returns the concrete workload object (e.g. *appsv1.Deployment)
+	// so it can be passed to client.Update. Passing the wrapper itself would
+	// break the client's scheme lookup, since its type is never registered.
+	object() client.Object
 }
 
 func pollInterval(configured time.Duration) time.Duration {
@@ -120,7 +124,7 @@ func reloadIfRoleChanged(ctx context.Context, c client.Client, lookup podidentit
 	tpl.Annotations[RoleARNHashAnnotation] = newHash
 	tpl.Annotations[RestartedAtAnnotation] = time.Now().UTC().Format(time.RFC3339)
 
-	if err := c.Update(ctx, wl); err != nil {
+	if err := c.Update(ctx, wl.object()); err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}

@@ -1,0 +1,1 @@
+../../.agents/rules/agents-md-claude-stub.instructions.md

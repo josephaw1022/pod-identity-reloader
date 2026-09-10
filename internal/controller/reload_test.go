@@ -20,6 +20,8 @@ import (
 	"github.com/josephaw1022/pod-identity-reloader/pkg/podidentity"
 )
 
+const testRoleARN = "arn:aws:iam::111122223333:role/r"
+
 type fakeLookup struct {
 	roleARN string
 	err     error
@@ -29,7 +31,7 @@ func (f *fakeLookup) RoleARN(_ context.Context, _, _, _ string) (string, error) 
 	return f.roleARN, f.err
 }
 
-func newTestDeployment(annotations map[string]string, saName string) *appsv1.Deployment {
+func newTestDeployment(annotations map[string]string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "app",
@@ -38,7 +40,7 @@ func newTestDeployment(annotations map[string]string, saName string) *appsv1.Dep
 		},
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{ServiceAccountName: saName},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
 		},
 	}
@@ -55,10 +57,10 @@ func newFakeClient(objs ...runtime.Object) client.Client {
 }
 
 func TestReloadIfRoleChangedSkipsWithoutOptIn(t *testing.T) {
-	dep := newTestDeployment(nil, "my-sa")
+	dep := newTestDeployment(nil)
 	c := newFakeClient(dep)
 
-	res, err := reloadIfRoleChanged(context.Background(), c, &fakeLookup{roleARN: "arn:aws:iam::111122223333:role/r"}, "cluster", 0, &deploymentWorkload{dep})
+	res, err := reloadIfRoleChanged(context.Background(), c, &fakeLookup{roleARN: testRoleARN}, "cluster", 0, &deploymentWorkload{dep})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,7 +73,7 @@ func TestReloadIfRoleChangedSkipsWithoutOptIn(t *testing.T) {
 }
 
 func TestReloadIfRoleChangedSkipsWithoutAssociation(t *testing.T) {
-	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: "true"}, "my-sa")
+	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: annotationValueTrue})
 	c := newFakeClient(dep)
 
 	res, err := reloadIfRoleChanged(context.Background(), c, &fakeLookup{err: podidentity.ErrNoAssociation}, "cluster", 0, &deploymentWorkload{dep})
@@ -84,10 +86,10 @@ func TestReloadIfRoleChangedSkipsWithoutAssociation(t *testing.T) {
 }
 
 func TestReloadIfRoleChangedPatchesOnFirstObservation(t *testing.T) {
-	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: "true"}, "my-sa")
+	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: annotationValueTrue})
 	c := newFakeClient(dep)
 
-	_, err := reloadIfRoleChanged(context.Background(), c, &fakeLookup{roleARN: "arn:aws:iam::111122223333:role/r"}, "cluster", 0, &deploymentWorkload{dep})
+	_, err := reloadIfRoleChanged(context.Background(), c, &fakeLookup{roleARN: testRoleARN}, "cluster", 0, &deploymentWorkload{dep})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,9 +102,9 @@ func TestReloadIfRoleChangedPatchesOnFirstObservation(t *testing.T) {
 }
 
 func TestReloadIfRoleChangedNoopWhenRoleUnchanged(t *testing.T) {
-	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: "true"}, "my-sa")
+	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: annotationValueTrue})
 	c := newFakeClient(dep)
-	lookup := &fakeLookup{roleARN: "arn:aws:iam::111122223333:role/r"}
+	lookup := &fakeLookup{roleARN: testRoleARN}
 
 	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -118,7 +120,7 @@ func TestReloadIfRoleChangedNoopWhenRoleUnchanged(t *testing.T) {
 }
 
 func TestReloadIfRoleChangedPatchesWhenRoleChanges(t *testing.T) {
-	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: "true"}, "my-sa")
+	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: annotationValueTrue})
 	c := newFakeClient(dep)
 
 	if _, err := reloadIfRoleChanged(context.Background(), c, &fakeLookup{roleARN: "arn:aws:iam::111122223333:role/r1"}, "cluster", 0, &deploymentWorkload{dep}); err != nil {

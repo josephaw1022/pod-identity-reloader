@@ -61,6 +61,27 @@ make deploy IMG=<some-registry>/pod-identity-reloader:tag
 The manager requires `--cluster-name=<your-eks-cluster-name>`; set it via
 `config/manager/manager.yaml` or an equivalent Helm/Kustomize override.
 
+### Published image
+
+The `Publish image` workflow builds the manager image and pushes it to GHCR
+when `main` or a version tag is pushed:
+
+```sh
+docker pull ghcr.io/josephaw1022/pod-identity-reloader:main
+```
+
+### Helm chart
+
+The `Publish Helm chart` workflow packages the chart and publishes it to GHCR
+as an OCI artifact for version tags. Install it with:
+
+```sh
+helm install pod-identity-reloader \
+  oci://ghcr.io/josephaw1022/pod-identity-reloader \
+  --version <version> \
+  --set clusterName=<your-eks-cluster-name>
+```
+
 ### Try it out
 
 ```sh

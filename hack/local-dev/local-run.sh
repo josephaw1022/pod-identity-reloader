@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run the manager locally (go run) against the MiniStack container started by
-# local-up.sh.
+# Run the manager locally (go run) against the LocalStack container started
+# by local-up.sh.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"

@@ -47,36 +47,50 @@ make lint-fix   # Run golangci-lint with auto-fix
 Run the linter's auto-fix and the full unit test suite before considering
 any Go change complete.
 
-### Local development against MiniStack
+### Local development against LocalStack
 
 This project has no dependency on a real AWS account for local development.
-[MiniStack](https://github.com/ministackorg/ministack) is a free,
-open-source AWS emulator used as a stand-in EKS/IAM API. See
-`hack/local-dev/env.sh` for the shared configuration (cluster name,
-MiniStack image/ports, seeded IAM role/namespace/service account).
+[LocalStack](https://www.localstack.cloud/) is used as a stand-in EKS/IAM
+API. Emulating EKS Pod Identity Associations (`CreatePodIdentityAssociation`
+and friends) requires **LocalStack Pro** — get an auth token at
+https://app.localstack.cloud/ and export it before running any of the
+targets below:
+
+```sh
+export LOCALSTACK_AUTH_TOKEN=...
+```
+
+See `hack/local-dev/env.sh` for the shared configuration (cluster name,
+LocalStack image/ports, seeded IAM role/namespace/service account).
+LocalStack always runs as a plain Docker container on the host — never as an
+in-cluster Pod — because its EKS emulation spins up real k3d-backed clusters
+and needs access to the host's Docker socket.
 
 Two flows are available:
 
 **Fast loop — run the manager as a local Go process:**
 
 ```sh
-make local-up    # Start MiniStack in Docker; seed an IAM role, EKS cluster, and Pod Identity Association
-make local-run   # go run the manager against MiniStack (--cluster-name matches the seeded cluster)
-make local-down  # Stop and remove the MiniStack container
+make local-up    # Start LocalStack in Docker; seed an IAM role, EKS cluster, and Pod Identity Association
+make local-run   # go run the manager against LocalStack (--cluster-name matches the seeded cluster)
+make local-down  # Stop and remove the LocalStack container
 ```
 
-**Full loop — Kind cluster with MiniStack and the controller deployed in-cluster:**
+**Full loop — Kind cluster with the controller deployed in-cluster, pointed at LocalStack:**
 
 ```sh
-make local-kind-deploy  # Kind cluster + in-cluster MiniStack + locally built/loaded controller image, manifests applied
+make local-kind-deploy  # Kind cluster + host-level LocalStack + locally built/loaded controller image, manifests applied
 make local-kind-down    # Delete the Kind cluster
 ```
 
-`local-kind-deploy` builds the manager image, loads it into Kind, deploys
-MiniStack under `config/local-dev/ministack`, deploys the operator via the
-`config/local-dev/controller` kustomize overlay (which points
-`AWS_ENDPOINT_URL` at the in-cluster MiniStack service), and seeds MiniStack
-with a matching `--cluster-name`. The seeded cluster name always matches the
+`local-kind-deploy` builds the manager image, loads it into Kind, starts
+LocalStack on the host, deploys the operator via the
+`config/local-dev/controller` kustomize overlay, and patches
+`AWS_ENDPOINT_URL` to the kind Docker network's gateway IP so pods running
+inside Kind can reach the host-level LocalStack container (LocalStack
+publishes its port on every host interface, including that gateway — no
+port-forward or in-cluster Service is needed). It then seeds LocalStack with
+a matching `--cluster-name`. The seeded cluster name always matches the
 `--cluster-name` the controller is started with — see
 `hack/local-dev/seed-aws.sh` and `config/local-dev/controller/manager_local_dev_patch.yaml`.
 
@@ -91,12 +105,15 @@ Never run e2e tests against a real development or production cluster.
 
 `make test-e2e` reuses the local development tooling under `hack/local-dev/`:
 it creates an isolated Kind cluster (`hack/local-dev/kind-up.sh`), and the
-Ginkgo suite deploys MiniStack into it, deploys the controller pointed at
-MiniStack, and seeds a sample IAM role/EKS cluster/Pod Identity Association
+Ginkgo suite starts LocalStack on the host, deploys the controller pointed
+at it, and seeds a sample IAM role/EKS cluster/Pod Identity Association
 (`hack/local-dev/seed-aws.sh`). One test rotates the sample role
 (`hack/local-dev/rotate-sample-role.sh`) and asserts the controller detects
 the change and triggers a rollout. See `test/e2e/e2e_test.go` and
 `test/e2e/testdata/sample-workload.yaml`.
+
+`test-e2e` requires `LOCALSTACK_AUTH_TOKEN` to be exported (see above); CI
+supplies it from a repository secret of the same name.
 
 ## Conventions
 

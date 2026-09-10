@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -39,9 +40,11 @@ const metricsRoleBindingName = "pod-identity-reloader-metrics-binding"
 // once the config/local-dev/controller kustomize overlay's namePrefix is applied.
 const controllerDeploymentName = "pod-identity-reloader-controller-manager"
 
-// ministackNamespace/ministackDeploymentName match config/local-dev/ministack.
-const ministackNamespace = "ministack-system"
-const ministackDeploymentName = "ministack"
+// localstackHostPort/kindDockerNetwork must match hack/local-dev/env.sh's
+// LOCALSTACK_HOST_PORT/KIND_DOCKER_NETWORK defaults (overridable via the
+// same-named env vars, mirroring the shell tooling).
+const defaultLocalstackHostPort = "4566"
+const defaultKindDockerNetwork = "kind"
 
 // sampleWorkloadManifest is applied to exercise the controller's core
 // reconciliation path (see hack/local-dev/env.sh for the namespace/service
@@ -59,9 +62,9 @@ var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
 	// Before running the tests, set up the environment: create the manager
-	// namespace, deploy MiniStack into the cluster as a stand-in AWS/EKS API,
-	// deploy the controller pointed at it, and seed MiniStack with a sample
-	// IAM role, EKS cluster, and Pod Identity Association.
+	// namespace, start LocalStack as a stand-in AWS/EKS API, deploy the
+	// controller pointed at it, and seed LocalStack with a sample IAM role,
+	// EKS cluster, and Pod Identity Association.
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
@@ -74,21 +77,24 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("deploying MiniStack")
-		cmd = exec.Command("kubectl", "apply", "-k", "config/local-dev/ministack")
+		By("starting LocalStack (requires LOCALSTACK_AUTH_TOKEN for EKS Pod Identity emulation)")
+		cmd = exec.Command("hack/local-dev/localstack-up.sh")
 		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy MiniStack")
+		Expect(err).NotTo(HaveOccurred(), "Failed to start LocalStack")
 
-		By("waiting for MiniStack to become ready")
-		cmd = exec.Command("kubectl", "-n", ministackNamespace, "rollout", "status",
-			fmt.Sprintf("deployment/%s", ministackDeploymentName), "--timeout=120s")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "MiniStack did not become ready")
-
-		By("deploying the controller-manager against MiniStack")
+		By("deploying the controller-manager")
 		cmd = exec.Command("kubectl", "apply", "-k", "config/local-dev/controller")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("pointing the controller-manager at LocalStack")
+		localstackEndpoint, err := localstackKindEndpoint()
+		Expect(err).NotTo(HaveOccurred(), "Failed to resolve the LocalStack endpoint reachable from Kind")
+		cmd = exec.Command("kubectl", "-n", namespace, "set", "env",
+			fmt.Sprintf("deployment/%s", controllerDeploymentName),
+			fmt.Sprintf("AWS_ENDPOINT_URL=%s", localstackEndpoint))
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to set the controller-manager's AWS_ENDPOINT_URL")
 
 		By("pointing the controller-manager at the locally built image")
 		cmd = exec.Command("kubectl", "-n", namespace, "set", "image",
@@ -97,14 +103,20 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to set the controller-manager image")
 
-		By("seeding MiniStack with a sample IAM role, EKS cluster, and Pod Identity Association")
-		cmd = exec.Command("hack/local-dev/with-ministack-portforward.sh", "hack/local-dev/seed-aws.sh")
+		By("waiting for the controller-manager rollout to complete")
+		cmd = exec.Command("kubectl", "-n", namespace, "rollout", "status",
+			fmt.Sprintf("deployment/%s", controllerDeploymentName), "--timeout=120s")
 		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to seed MiniStack")
+		Expect(err).NotTo(HaveOccurred(), "The controller-manager rollout did not complete")
+
+		By("seeding LocalStack with a sample IAM role, EKS cluster, and Pod Identity Association")
+		cmd = exec.Command("hack/local-dev/seed-aws.sh")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to seed LocalStack")
 	})
 
 	// After all tests have been executed, clean up the sample workload, the
-	// controller, MiniStack, and the manager namespace.
+	// controller, LocalStack, and the manager namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
@@ -118,8 +130,8 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("kubectl", "delete", "-k", "config/local-dev/controller", "--ignore-not-found=true")
 		_, _ = utils.Run(cmd)
 
-		By("undeploying MiniStack")
-		cmd = exec.Command("kubectl", "delete", "-k", "config/local-dev/ministack", "--ignore-not-found=true")
+		By("stopping LocalStack")
+		cmd = exec.Command("hack/local-dev/localstack-down.sh")
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")
@@ -319,7 +331,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}, 2*time.Minute).Should(Succeed())
 
 			By("rotating the IAM role bound via the Pod Identity Association")
-			cmd = exec.Command("hack/local-dev/with-ministack-portforward.sh", "hack/local-dev/rotate-sample-role.sh")
+			cmd = exec.Command("hack/local-dev/rotate-sample-role.sh")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to rotate the sample role")
 
@@ -332,6 +344,36 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 	})
 })
+
+// localstackKindEndpoint resolves the AWS_ENDPOINT_URL a pod running inside
+// Kind must use to reach the host-level LocalStack container started by
+// hack/local-dev/localstack-up.sh. LocalStack publishes its port on every
+// host interface, including the kind Docker network's gateway, so pods can
+// reach it there without LocalStack joining any special network itself.
+func localstackKindEndpoint() (string, error) {
+	kindDockerNetwork := os.Getenv("KIND_DOCKER_NETWORK")
+	if kindDockerNetwork == "" {
+		kindDockerNetwork = defaultKindDockerNetwork
+	}
+	localstackHostPort := os.Getenv("LOCALSTACK_HOST_PORT")
+	if localstackHostPort == "" {
+		localstackHostPort = defaultLocalstackHostPort
+	}
+
+	cmd := exec.Command("docker", "network", "inspect", kindDockerNetwork,
+		"--format", "{{ (index .IPAM.Config 0).Gateway }}")
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return "", fmt.Errorf("inspecting docker network %q: %w", kindDockerNetwork, err)
+	}
+
+	gatewayIP := strings.TrimSpace(output)
+	if gatewayIP == "" {
+		return "", fmt.Errorf("docker network %q has no gateway IP", kindDockerNetwork)
+	}
+
+	return fmt.Sprintf("http://%s:%s", gatewayIP, localstackHostPort), nil
+}
 
 // sampleDeploymentAnnotation returns the value of the given annotation on
 // the sample Deployment's pod template.

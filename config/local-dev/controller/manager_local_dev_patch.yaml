@@ -16,11 +16,16 @@
 - op: add
   path: /spec/template/spec/containers/0/env
   value:
+    # LocalStack always runs as a host-level Docker container (see
+    # hack/local-dev/localstack-up.sh), not an in-cluster Service, so this
+    # value is only a placeholder: hack/local-dev/kind-deploy.sh (and the
+    # e2e suite) patch it after apply to the kind Docker network's gateway
+    # IP, which is reachable from pods running inside Kind.
     - name: AWS_ENDPOINT_URL
-      value: http://ministack.ministack-system.svc.cluster.local:4566
+      value: http://localstack.invalid:4566
     - name: AWS_ACCESS_KEY_ID
-      value: "000000000000"
+      value: "test"
     - name: AWS_SECRET_ACCESS_KEY
-      value: ministack
+      value: "test"
     - name: AWS_REGION
       value: us-east-1

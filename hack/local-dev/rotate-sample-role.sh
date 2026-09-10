@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rotate the IAM role bound to the sample ServiceAccount's Pod Identity
-# Association in MiniStack. Lets local dev/e2e tests exercise the
+# Association in LocalStack. Lets local dev/e2e tests exercise the
 # controller's role-change detection without touching real AWS.
 #
 # Usage: rotate-sample-role.sh [new-role-name]

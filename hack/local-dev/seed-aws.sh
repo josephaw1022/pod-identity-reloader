@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Seed MiniStack with the IAM role, EKS cluster, and Pod Identity Association
+# Seed LocalStack with the IAM role, EKS cluster, and Pod Identity Association
 # the controller expects to find.
 #
-# Targets whatever AWS_ENDPOINT_URL is currently set to (see env.sh), so this
-# script works unmodified for both:
-#   - the docker-only flow (endpoint = http://localhost:<port>)
-#   - the Kind flow (endpoint = in-cluster MiniStack service, reached via a
-#     temporary kubectl port-forward)
+# Targets whatever AWS_ENDPOINT_URL is currently set to (see env.sh). This is
+# always a host-reachable address, since LocalStack runs as a plain Docker
+# container on the host for both the docker-only flow and the Kind flow (the
+# controller running inside Kind reaches it separately via the kind Docker
+# network's gateway IP; see kind-deploy.sh).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hack/local-dev/env.sh
@@ -17,7 +17,7 @@ command -v aws >/dev/null 2>&1 || {
 	exit 1
 }
 
-log "Seeding MiniStack (${AWS_ENDPOINT_URL}) with cluster '${LOCAL_DEV_CLUSTER_NAME}'..."
+log "Seeding LocalStack (${AWS_ENDPOINT_URL}) with cluster '${LOCAL_DEV_CLUSTER_NAME}'..."
 
 TRUST_POLICY=$(cat <<'JSON'
 {

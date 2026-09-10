@@ -30,6 +30,13 @@ jobs:
       contents: read
     name: Run on Ubuntu
     runs-on: ubuntu-latest
+    env:
+      # EKS Pod Identity emulation (CreatePodIdentityAssociation, etc.) is a
+      # LocalStack Pro feature; add a repository secret named
+      # LOCALSTACK_AUTH_TOKEN (see https://docs.localstack.cloud/getting-started/auth-token/).
+      # Not available on pull_request runs from forks or from Dependabot,
+      # since GitHub withholds repository secrets from those runs.
+      LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
     steps:
       - name: Clone the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

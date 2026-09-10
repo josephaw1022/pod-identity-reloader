@@ -14,15 +14,15 @@ their entire lifetime, so a rollout is the only way to pick up the change.
 ## How it works
 
 1. Opt a workload in by adding the annotation
-   `pod-identity-reloader.josephaw1022.dev/auto: "true"`.
+   `pod-identity-reloader.dev/auto: "true"`.
 2. The controller reads the workload's `spec.template.spec.serviceAccountName`
    and calls the EKS API (`ListPodIdentityAssociations` /
    `DescribePodIdentityAssociation`) to resolve the IAM role currently bound
    to that namespace/ServiceAccount pair.
 3. The role ARN is hashed and stored as a pod template annotation
-   (`pod-identity-reloader.josephaw1022.dev/role-arn-hash`). If the hash
+   (`pod-identity-reloader.dev/role-arn-hash`). If the hash
    changes, the controller patches
-   `pod-identity-reloader.josephaw1022.dev/restarted-at` on the pod template,
+   `pod-identity-reloader.dev/restarted-at` on the pod template,
    which triggers a rollout — the same mechanism `kubectl rollout restart`
    uses.
 4. The workload is re-checked on a poll interval (default `30s`, configurable

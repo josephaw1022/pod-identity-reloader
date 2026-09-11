@@ -361,14 +361,17 @@ func localstackKindEndpoint() (string, error) {
 		localstackHostPort = defaultLocalstackHostPort
 	}
 
-	cmd := exec.Command("docker", "network", "inspect", kindDockerNetwork,
-		"--format", "{{ (index .IPAM.Config 0).Gateway }}")
-	output, err := utils.Run(cmd)
+	ipamConfigs, err := dockerNetworkIPAMConfigs(kindDockerNetwork)
 	if err != nil {
-		return "", fmt.Errorf("inspecting docker network %q: %w", kindDockerNetwork, err)
+		return "", err
 	}
 
-	gatewayIP := strings.TrimSpace(output)
+	ipamConfig, err := firstIPv4IPAMConfig(ipamConfigs)
+	if err != nil {
+		return "", fmt.Errorf("docker network %q: %w", kindDockerNetwork, err)
+	}
+
+	gatewayIP := ipamConfig.Gateway
 	if gatewayIP == "" {
 		// Docker sometimes reports an empty Gateway even for a fully
 		// functional network: the daemon populates it lazily and, on
@@ -376,7 +379,7 @@ func localstackKindEndpoint() (string, error) {
 		// runs (see moby/moby#51890 and moby/moby#26799). Fall back to
 		// deriving the gateway from the network's subnet: Docker always
 		// assigns the first usable address in the subnet as the gateway.
-		gatewayIP, err = gatewayFromSubnet(kindDockerNetwork)
+		gatewayIP, err = gatewayFromSubnet(ipamConfig.Subnet)
 		if err != nil {
 			return "", fmt.Errorf("docker network %q reported no gateway IP and it could not be derived from its subnet: %w", kindDockerNetwork, err)
 		}
@@ -385,22 +388,51 @@ func localstackKindEndpoint() (string, error) {
 	return fmt.Sprintf("http://%s:%s", gatewayIP, localstackHostPort), nil
 }
 
-// gatewayFromSubnet derives the Docker-assigned gateway address for the
-// given network by computing the first usable host address in its subnet,
-// which is how Docker's default bridge driver allocates gateways.
-func gatewayFromSubnet(dockerNetwork string) (string, error) {
+// ipamConfig mirrors the subset of Docker's network IPAM config this file
+// needs (docker network inspect .IPAM.Config entries).
+type ipamConfig struct {
+	Subnet  string `json:"Subnet"`
+	Gateway string `json:"Gateway"`
+}
+
+// dockerNetworkIPAMConfigs returns every IPAM config block (one per IP
+// family) for the given Docker network.
+func dockerNetworkIPAMConfigs(dockerNetwork string) ([]ipamConfig, error) {
 	cmd := exec.Command("docker", "network", "inspect", dockerNetwork,
-		"--format", "{{ (index .IPAM.Config 0).Subnet }}")
+		"--format", "{{ json .IPAM.Config }}")
 	output, err := utils.Run(cmd)
 	if err != nil {
-		return "", fmt.Errorf("inspecting docker network %q: %w", dockerNetwork, err)
+		return nil, fmt.Errorf("inspecting docker network %q: %w", dockerNetwork, err)
 	}
 
-	subnet := strings.TrimSpace(output)
-	if subnet == "" {
-		return "", fmt.Errorf("docker network %q has no subnet", dockerNetwork)
+	var configs []ipamConfig
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &configs); err != nil {
+		return nil, fmt.Errorf("parsing IPAM config for docker network %q: %w", dockerNetwork, err)
 	}
 
+	return configs, nil
+}
+
+// firstIPv4IPAMConfig returns the first IPv4 IPAM config in configs. Kind's
+// Docker network is dual-stack, so blindly picking configs[0] can select an
+// IPv6 entry, producing an endpoint the AWS SDK can't dial.
+func firstIPv4IPAMConfig(configs []ipamConfig) (ipamConfig, error) {
+	for _, c := range configs {
+		_, ipNet, err := net.ParseCIDR(c.Subnet)
+		if err != nil {
+			continue
+		}
+		if ipNet.IP.To4() != nil {
+			return c, nil
+		}
+	}
+	return ipamConfig{}, fmt.Errorf("no IPv4 IPAM config found")
+}
+
+// gatewayFromSubnet derives the Docker-assigned gateway address for the
+// given subnet by computing its first usable host address, which is how
+// Docker's default bridge driver allocates gateways.
+func gatewayFromSubnet(subnet string) (string, error) {
 	ip, ipNet, err := net.ParseCIDR(subnet)
 	if err != nil {
 		return "", fmt.Errorf("parsing subnet %q: %w", subnet, err)

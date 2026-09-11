@@ -27,7 +27,7 @@ else
 		--name "${LOCALSTACK_CONTAINER_NAME}" \
 		-p "${LOCALSTACK_HOST_PORT}:4566" \
 		-e LOCALSTACK_AUTH_TOKEN="${LOCALSTACK_AUTH_TOKEN}" \
-		-e SERVICES=eks,iam,sts \
+		-e SERVICES=eks,iam,sts,ec2 \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		"${LOCALSTACK_IMAGE}" >/dev/null
 fi

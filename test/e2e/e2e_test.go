@@ -163,6 +163,28 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
 			}
 
+			// The sample workload lives in sampleWorkloadNamespace, not
+			// namespace (the controller's own namespace), so it needs its
+			// own diagnostics dump to debug failures around it.
+			By("Fetching sample Deployment state")
+			cmd = exec.Command("kubectl", "get", "deployment", sampleDeploymentName,
+				"-n", sampleWorkloadNamespace, "-o", "yaml")
+			sampleDeploymentOutput, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Sample Deployment:\n%s", sampleDeploymentOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get sample Deployment: %s", err)
+			}
+
+			By("Fetching sample workload namespace events")
+			cmd = exec.Command("kubectl", "get", "events", "-n", sampleWorkloadNamespace, "--sort-by=.lastTimestamp")
+			sampleEventsOutput, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Sample workload namespace events:\n%s", sampleEventsOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get sample workload namespace events: %s", err)
+			}
+
 			By("Fetching curl-metrics logs")
 			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 			metricsOutput, err := utils.Run(cmd)
@@ -457,9 +479,18 @@ func incrementIP(ip net.IP) {
 
 // sampleDeploymentAnnotation returns the value of the given annotation on
 // the sample Deployment's pod template.
+//
+// Dots in key must be escaped: kubectl's JSONPath engine (k8s.io/client-go's
+// util/jsonpath) still splits on unescaped "." inside a bracket-quoted
+// key, so an expression like annotations['a.b/c'] is treated as a lookup
+// for the field "a" (not found) rather than the literal key "a.b/c". With
+// kubectl's default AllowMissingKeys behavior this fails silently, printing
+// an empty string instead of an error, which would otherwise be very hard
+// to notice.
 func sampleDeploymentAnnotation(key string) (string, error) {
+	escapedKey := strings.ReplaceAll(key, ".", `\.`)
 	cmd := exec.Command("kubectl", "get", "deployment", sampleDeploymentName, "-n", sampleWorkloadNamespace,
-		"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", key))
+		"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", escapedKey))
 	return utils.Run(cmd)
 }
 

@@ -101,12 +101,48 @@ if [ -n "${EXISTING_ASSOC}" ] && [ "${EXISTING_ASSOC}" != "None" ]; then
 	log "Pod Identity Association for ${LOCAL_DEV_NAMESPACE}/${LOCAL_DEV_SERVICE_ACCOUNT} already exists."
 else
 	log "Creating Pod Identity Association for ${LOCAL_DEV_NAMESPACE}/${LOCAL_DEV_SERVICE_ACCOUNT}..."
-	aws_local eks create-pod-identity-association \
+	CREATE_ASSOC_OUTPUT=""
+	if ! CREATE_ASSOC_OUTPUT=$(aws_local eks create-pod-identity-association \
 		--cluster-name "${LOCAL_DEV_CLUSTER_NAME}" \
 		--namespace "${LOCAL_DEV_NAMESPACE}" \
 		--service-account "${LOCAL_DEV_SERVICE_ACCOUNT}" \
-		--role-arn "${ROLE_ARN}" \
-		>/dev/null
+		--role-arn "${ROLE_ARN}" 2>&1); then
+		if ! echo "${CREATE_ASSOC_OUTPUT}" | grep -q "ResourceInUseException"; then
+			echo "${CREATE_ASSOC_OUTPUT}" >&2
+			exit 1
+		fi
+
+		# LocalStack can report a service account as already associated
+		# even though our own list check above found nothing (its EKS
+		# Pod Identity emulation is backed by a separate k3d-backed
+		# cluster, so association visibility can lag cluster/list calls).
+		# Recover by finding and replacing whatever association actually
+		# exists for this namespace/service account.
+		log "Pod Identity Association for ${LOCAL_DEV_NAMESPACE}/${LOCAL_DEV_SERVICE_ACCOUNT} already exists; reconciling it..."
+		CONFLICTING_ASSOC=$(aws_local eks list-pod-identity-associations \
+			--cluster-name "${LOCAL_DEV_CLUSTER_NAME}" \
+			--namespace "${LOCAL_DEV_NAMESPACE}" \
+			--service-account "${LOCAL_DEV_SERVICE_ACCOUNT}" \
+			--query 'associations[0].associationId' --output text 2>/dev/null || true)
+
+		if [ -z "${CONFLICTING_ASSOC}" ] || [ "${CONFLICTING_ASSOC}" = "None" ]; then
+			log "ERROR: could not find the conflicting Pod Identity Association to reconcile."
+			echo "${CREATE_ASSOC_OUTPUT}" >&2
+			exit 1
+		fi
+
+		log "Deleting conflicting Pod Identity Association '${CONFLICTING_ASSOC}'..."
+		aws_local eks delete-pod-identity-association \
+			--cluster-name "${LOCAL_DEV_CLUSTER_NAME}" \
+			--association-id "${CONFLICTING_ASSOC}" >/dev/null
+
+		aws_local eks create-pod-identity-association \
+			--cluster-name "${LOCAL_DEV_CLUSTER_NAME}" \
+			--namespace "${LOCAL_DEV_NAMESPACE}" \
+			--service-account "${LOCAL_DEV_SERVICE_ACCOUNT}" \
+			--role-arn "${ROLE_ARN}" \
+			>/dev/null
+	fi
 fi
 
 log "Seeding complete:"

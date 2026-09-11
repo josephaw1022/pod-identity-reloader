@@ -93,22 +93,25 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 ##@ Local Development
 
 # See hack/local-dev/env.sh for the shared configuration (cluster name,
-# MiniStack image/ports, seeded IAM role, etc.) used by all local-* targets.
+# LocalStack image/ports, seeded IAM role, etc.) used by all local-* targets.
+# EKS Pod Identity emulation requires a LocalStack Pro auth token: export
+# LOCALSTACK_AUTH_TOKEN before running local-up/local-kind-deploy. See
+# https://docs.localstack.cloud/getting-started/auth-token/.
 
 .PHONY: local-up
-local-up: ## Start MiniStack in Docker and seed it with a sample IAM role/EKS cluster/Pod Identity Association.
+local-up: ## Start LocalStack in Docker and seed it with a sample IAM role/EKS cluster/Pod Identity Association.
 	hack/local-dev/local-up.sh
 
 .PHONY: local-down
-local-down: ## Stop and remove the local MiniStack container.
+local-down: ## Stop and remove the local LocalStack container.
 	hack/local-dev/local-down.sh
 
 .PHONY: local-run
-local-run: manifests generate fmt vet ## Run the manager locally against the MiniStack container started by 'make local-up'.
+local-run: manifests generate fmt vet ## Run the manager locally against the LocalStack container started by 'make local-up'.
 	hack/local-dev/local-run.sh
 
 .PHONY: local-kind-deploy
-local-kind-deploy: manifests ## Full local deployment: Kind cluster + in-cluster MiniStack + locally built controller image, seeded and applied.
+local-kind-deploy: manifests ## Full local deployment: Kind cluster + host-level LocalStack + locally built controller image, seeded and applied.
 	hack/local-dev/kind-deploy.sh
 
 .PHONY: local-kind-down

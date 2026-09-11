@@ -1,5 +1,5 @@
 # Sample workload used by the e2e suite to exercise the controller's core
-# reconciliation path against MiniStack. The namespace and ServiceAccount
+# reconciliation path against LocalStack. The namespace and ServiceAccount
 # name must match hack/local-dev/env.sh's LOCAL_DEV_NAMESPACE and
 # LOCAL_DEV_SERVICE_ACCOUNT, which is what hack/local-dev/seed-aws.sh seeds
 # a Pod Identity Association for.

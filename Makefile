@@ -24,6 +24,8 @@ SHELL = /usr/bin/env bash -o pipefail
 .PHONY: all
 all: build
 
+.DEFAULT_GOAL := help
+
 ##@ General
 
 # The help target prints out all targets with their descriptions organized

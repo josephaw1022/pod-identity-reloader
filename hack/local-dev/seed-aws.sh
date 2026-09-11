@@ -49,11 +49,45 @@ fi
 if aws_local eks describe-cluster --name "${LOCAL_DEV_CLUSTER_NAME}" >/dev/null 2>&1; then
 	log "EKS cluster '${LOCAL_DEV_CLUSTER_NAME}' already exists."
 else
+	# EKS's CreateCluster validates its --resources-vpc-config subnet IDs
+	# against real EC2 resources (via DescribeSubnets), so a VPC and
+	# subnets must actually exist in LocalStack before the cluster does.
+	VPC_ID=$(aws_local ec2 describe-vpcs \
+		--filters "Name=tag:Name,Values=${LOCAL_DEV_CLUSTER_NAME}" \
+		--query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
+
+	if [ -z "${VPC_ID}" ] || [ "${VPC_ID}" = "None" ]; then
+		log "Creating VPC for '${LOCAL_DEV_CLUSTER_NAME}'..."
+		VPC_ID=$(aws_local ec2 create-vpc --cidr-block 10.0.0.0/16 \
+			--query 'Vpc.VpcId' --output text)
+		aws_local ec2 create-tags --resources "${VPC_ID}" \
+			--tags "Key=Name,Value=${LOCAL_DEV_CLUSTER_NAME}" >/dev/null
+	else
+		log "VPC for '${LOCAL_DEV_CLUSTER_NAME}' already exists."
+	fi
+
+	SUBNET_IDS=$(aws_local ec2 describe-subnets \
+		--filters "Name=vpc-id,Values=${VPC_ID}" \
+		--query 'Subnets[].SubnetId' --output text 2>/dev/null || true)
+
+	if [ -z "${SUBNET_IDS}" ]; then
+		log "Creating subnets for '${LOCAL_DEV_CLUSTER_NAME}'..."
+		SUBNET_ID_1=$(aws_local ec2 create-subnet --vpc-id "${VPC_ID}" \
+			--cidr-block 10.0.1.0/24 --availability-zone "${AWS_REGION}a" \
+			--query 'Subnet.SubnetId' --output text)
+		SUBNET_ID_2=$(aws_local ec2 create-subnet --vpc-id "${VPC_ID}" \
+			--cidr-block 10.0.2.0/24 --availability-zone "${AWS_REGION}b" \
+			--query 'Subnet.SubnetId' --output text)
+		SUBNET_IDS="${SUBNET_ID_1} ${SUBNET_ID_2}"
+	else
+		log "Subnets for '${LOCAL_DEV_CLUSTER_NAME}' already exist."
+	fi
+
 	log "Creating EKS cluster '${LOCAL_DEV_CLUSTER_NAME}'..."
 	aws_local eks create-cluster \
 		--name "${LOCAL_DEV_CLUSTER_NAME}" \
 		--role-arn "${ROLE_ARN}" \
-		--resources-vpc-config subnetIds=subnet-local1,subnet-local2 \
+		--resources-vpc-config "subnetIds=$(echo "${SUBNET_IDS}" | tr ' ' ',')" \
 		>/dev/null
 fi
 

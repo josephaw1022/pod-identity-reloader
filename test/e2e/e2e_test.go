@@ -12,6 +12,7 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -369,10 +370,57 @@ func localstackKindEndpoint() (string, error) {
 
 	gatewayIP := strings.TrimSpace(output)
 	if gatewayIP == "" {
-		return "", fmt.Errorf("docker network %q has no gateway IP", kindDockerNetwork)
+		// Docker sometimes reports an empty Gateway even for a fully
+		// functional network: the daemon populates it lazily and, on
+		// ephemeral CI runners, it isn't always resolved by the time this
+		// runs (see moby/moby#51890 and moby/moby#26799). Fall back to
+		// deriving the gateway from the network's subnet: Docker always
+		// assigns the first usable address in the subnet as the gateway.
+		gatewayIP, err = gatewayFromSubnet(kindDockerNetwork)
+		if err != nil {
+			return "", fmt.Errorf("docker network %q reported no gateway IP and it could not be derived from its subnet: %w", kindDockerNetwork, err)
+		}
 	}
 
 	return fmt.Sprintf("http://%s:%s", gatewayIP, localstackHostPort), nil
+}
+
+// gatewayFromSubnet derives the Docker-assigned gateway address for the
+// given network by computing the first usable host address in its subnet,
+// which is how Docker's default bridge driver allocates gateways.
+func gatewayFromSubnet(dockerNetwork string) (string, error) {
+	cmd := exec.Command("docker", "network", "inspect", dockerNetwork,
+		"--format", "{{ (index .IPAM.Config 0).Subnet }}")
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return "", fmt.Errorf("inspecting docker network %q: %w", dockerNetwork, err)
+	}
+
+	subnet := strings.TrimSpace(output)
+	if subnet == "" {
+		return "", fmt.Errorf("docker network %q has no subnet", dockerNetwork)
+	}
+
+	ip, ipNet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		return "", fmt.Errorf("parsing subnet %q: %w", subnet, err)
+	}
+
+	gatewayIP := ip.Mask(ipNet.Mask)
+	incrementIP(gatewayIP)
+
+	return gatewayIP.String(), nil
+}
+
+// incrementIP increments ip in place by one address, e.g. 172.18.0.0 becomes
+// 172.18.0.1.
+func incrementIP(ip net.IP) {
+	for i := len(ip) - 1; i >= 0; i-- {
+		ip[i]++
+		if ip[i] != 0 {
+			break
+		}
+	}
 }
 
 // sampleDeploymentAnnotation returns the value of the given annotation on

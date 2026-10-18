@@ -17,7 +17,7 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-${LOCAL_DEV_CLUSTER_NAME}}"
 
 # MiniStack docker container settings (used by the docker-only flow, i.e.
 # `make local-up` + `make run`).
-MINISTACK_IMAGE="${MINISTACK_IMAGE:-ministackorg/ministack:latest}"
+MINISTACK_IMAGE="${MINISTACK_IMAGE:-docker.io/ministackorg/ministack:latest}"
 MINISTACK_CONTAINER_NAME="${MINISTACK_CONTAINER_NAME:-pod-identity-reloader-ministack}"
 MINISTACK_HOST_PORT="${MINISTACK_HOST_PORT:-4566}"
 
@@ -47,7 +47,7 @@ LOCAL_DEV_SERVICE_ACCOUNT="${LOCAL_DEV_SERVICE_ACCOUNT:-pod-identity-reloader-sa
 # Point the AWS CLI/SDK at MiniStack. Callers may override AWS_ENDPOINT_URL
 # before sourcing this file (e.g. to target the in-cluster service instead of
 # the host-mapped port).
-export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://localhost:${MINISTACK_HOST_PORT}}"
+export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://127.0.0.1:${MINISTACK_HOST_PORT}}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-$LOCAL_DEV_AWS_ACCESS_KEY_ID}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-$LOCAL_DEV_AWS_SECRET_ACCESS_KEY}"
 export AWS_REGION

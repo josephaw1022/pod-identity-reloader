@@ -53,12 +53,11 @@ metadata:
 
 The controller resolves the IAM role currently bound to the workload's
 `spec.template.spec.serviceAccountName` via the EKS API, and triggers a
-rollout (same mechanism as `kubectl rollout restart`) whenever that role
-changes. Workloads are re-checked on a poll interval (default `30s`,
-configurable via `--poll-interval`), since a role change on the AWS side
-produces no Kubernetes watch event.
-
-Workloads whose ServiceAccount has no Pod Identity Association are ignored.
+rollout (same mechanism as `kubectl rollout restart`) whenever an
+association is created, pointed at a different IAM role, or removed.
+Workloads are re-checked on a poll interval (default `30s`, configurable via
+`--poll-interval`), since changes on the AWS side produce no Kubernetes watch
+event.
 
 See [`examples/sample-deployment.yaml`](examples/sample-deployment.yaml) for
 a full example.

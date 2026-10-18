@@ -17,7 +17,7 @@ import (
 )
 
 // ErrNoAssociation is returned when the ServiceAccount has no EKS Pod
-// Identity Association, meaning there is nothing for the controller to track.
+// Identity Association.
 var ErrNoAssociation = errors.New("no pod identity association found for service account")
 
 // Lookup resolves the IAM role ARN bound to a namespace/service account pair

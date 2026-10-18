@@ -52,9 +52,10 @@ const sampleWorkloadManifest = "test/e2e/testdata/sample-workload.yaml"
 const sampleWorkloadNamespace = "default"
 const sampleDeploymentName = "pod-identity-reloader-sample"
 
-// roleARNHashAnnotation is written on the pod template by the controller;
-// must match internal/controller.RoleARNHashAnnotation.
+// roleARNHashAnnotation and restartedAtAnnotation are written on the pod
+// template by the controller; must match internal/controller constants.
 const roleARNHashAnnotation = "pod-identity-reloader.dev/role-arn-hash"
+const restartedAtAnnotation = "pod-identity-reloader.dev/restarted-at"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -356,11 +357,72 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(func(g Gomega) {
 				hash, err := sampleDeploymentAnnotation(roleARNHashAnnotation)
 				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).NotTo(BeEmpty(), "expected role-arn-hash annotation to stay non-empty after role rotation")
 				g.Expect(hash).NotTo(Equal(initialHash), "expected role-arn-hash annotation to change after role rotation")
+			}, 2*time.Minute).Should(Succeed())
+		})
+
+		It("should trigger a rollout when the Pod Identity Association is removed", func() {
+			beforeRemovalRestartedAt := waitForSampleRestartedAt()
+
+			By("deleting the Pod Identity Association in MiniStack")
+			cmd := exec.Command(
+				"hack/local-dev/with-ministack-portforward.sh",
+				"hack/local-dev/delete-sample-association.sh",
+			)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete the sample Pod Identity Association")
+
+			By("waiting for the controller to detect the removed association and trigger a rollout")
+			Eventually(func(g Gomega) {
+				hash, err := sampleDeploymentAnnotation(roleARNHashAnnotation)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).To(BeEmpty(), "expected role-arn-hash annotation to be cleared after association removal")
+
+				restartedAt, err := sampleDeploymentAnnotation(restartedAtAnnotation)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(restartedAt).NotTo(BeEmpty())
+				g.Expect(restartedAt).NotTo(Equal(beforeRemovalRestartedAt),
+					"expected restarted-at annotation to be updated after association removal")
+			}, 2*time.Minute).Should(Succeed())
+		})
+
+		It("should trigger a rollout when a Pod Identity Association is added", func() {
+			beforeAddRestartedAt := waitForSampleRestartedAt()
+
+			By("re-creating the Pod Identity Association in MiniStack")
+			cmd := exec.Command("hack/local-dev/with-ministack-portforward.sh", "hack/local-dev/seed-aws.sh")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to re-seed the sample Pod Identity Association")
+
+			By("waiting for the controller to detect the new association and trigger a rollout")
+			Eventually(func(g Gomega) {
+				hash, err := sampleDeploymentAnnotation(roleARNHashAnnotation)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(hash).NotTo(BeEmpty(), "expected role-arn-hash annotation to be set after association is added")
+
+				restartedAt, err := sampleDeploymentAnnotation(restartedAtAnnotation)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(restartedAt).NotTo(BeEmpty())
+				g.Expect(restartedAt).NotTo(Equal(beforeAddRestartedAt),
+					"expected restarted-at annotation to be updated after association is added")
 			}, 2*time.Minute).Should(Succeed())
 		})
 	})
 })
+
+// waitForSampleRestartedAt waits for the sample Deployment's restarted-at
+// annotation to be populated and returns its value.
+func waitForSampleRestartedAt() string {
+	var current string
+	Eventually(func(g Gomega) {
+		restartedAt, err := sampleDeploymentAnnotation(restartedAtAnnotation)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(restartedAt).NotTo(BeEmpty(), "expected restarted-at annotation to be set")
+		current = restartedAt
+	}, 2*time.Minute).Should(Succeed())
+	return current
+}
 
 // sampleDeploymentAnnotation returns the value of the given annotation on
 // the sample Deployment's pod template.

@@ -102,30 +102,42 @@ func reloadIfRoleChanged(ctx context.Context, c client.Client, lookup podidentit
 	tpl := wl.template()
 	sa := serviceAccountName(tpl)
 
+	var newHash string
 	roleARN, err := lookup.RoleARN(ctx, clusterName, wl.GetNamespace(), sa)
 	if err != nil {
-		if errors.Is(err, podidentity.ErrNoAssociation) {
+		if !errors.Is(err, podidentity.ErrNoAssociation) {
+			return ctrl.Result{}, err
+		}
+	} else {
+		hash := sha256.Sum256([]byte(roleARN))
+		newHash = hex.EncodeToString(hash[:])
+	}
+
+	var currentHash string
+	if tpl.Annotations != nil {
+		currentHash = tpl.Annotations[RoleARNHashAnnotation]
+	}
+
+	if currentHash == newHash {
+		if newHash == "" {
 			log.V(1).Info("No pod identity association for service account, nothing to track",
 				"serviceAccount", sa)
-			return ctrl.Result{RequeueAfter: pollInterval(interval)}, nil
 		}
-		return ctrl.Result{}, err
-	}
-
-	hash := sha256.Sum256([]byte(roleARN))
-	newHash := hex.EncodeToString(hash[:])
-
-	if tpl.Annotations != nil && tpl.Annotations[RoleARNHashAnnotation] == newHash {
 		return ctrl.Result{RequeueAfter: pollInterval(interval)}, nil
 	}
-
-	log.Info("IAM role changed for service account, restarting workload",
-		"serviceAccount", sa, "name", wl.GetName(), "namespace", wl.GetNamespace())
 
 	if tpl.Annotations == nil {
 		tpl.Annotations = map[string]string{}
 	}
-	tpl.Annotations[RoleARNHashAnnotation] = newHash
+	if newHash == "" {
+		log.Info("Pod identity association removed for service account, restarting workload",
+			"serviceAccount", sa, "name", wl.GetName(), "namespace", wl.GetNamespace())
+		delete(tpl.Annotations, RoleARNHashAnnotation)
+	} else {
+		log.Info("IAM role changed for service account, restarting workload",
+			"serviceAccount", sa, "name", wl.GetName(), "namespace", wl.GetNamespace())
+		tpl.Annotations[RoleARNHashAnnotation] = newHash
+	}
 	tpl.Annotations[RestartedAtAnnotation] = time.Now().UTC().Format(time.RFC3339)
 
 	if err := c.Update(ctx, wl.object()); err != nil {

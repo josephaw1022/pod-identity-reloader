@@ -135,3 +135,85 @@ func TestReloadIfRoleChangedPatchesWhenRoleChanges(t *testing.T) {
 		t.Fatal("expected hash annotation to change when role changes")
 	}
 }
+
+func TestReloadIfRoleChangedPatchesWhenAssociationAdded(t *testing.T) {
+	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: annotationValueTrue})
+	c := newFakeClient(dep)
+	lookup := &fakeLookup{err: podidentity.ErrNoAssociation}
+
+	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dep.Spec.Template.Annotations[RoleARNHashAnnotation] != "" {
+		t.Fatal("expected no hash annotation when no association exists")
+	}
+	if dep.Spec.Template.Annotations[RestartedAtAnnotation] != "" {
+		t.Fatal("expected no restarted-at annotation when no association exists")
+	}
+
+	lookup.err = nil
+	lookup.roleARN = testRoleARN
+
+	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dep.Spec.Template.Annotations[RoleARNHashAnnotation] == "" {
+		t.Fatal("expected role arn hash annotation to be set when association is added")
+	}
+	if dep.Spec.Template.Annotations[RestartedAtAnnotation] == "" {
+		t.Fatal("expected restarted-at annotation to be set when association is added")
+	}
+}
+
+func TestReloadIfRoleChangedPatchesWhenAssociationRemovedAndReadded(t *testing.T) {
+	dep := newTestDeployment(map[string]string{AutoReloadAnnotation: annotationValueTrue})
+	c := newFakeClient(dep)
+	lookup := &fakeLookup{roleARN: testRoleARN}
+
+	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	initialHash := dep.Spec.Template.Annotations[RoleARNHashAnnotation]
+	if initialHash == "" {
+		t.Fatal("expected initial role arn hash annotation to be set")
+	}
+
+	const sentinelRestartedAt = "2000-01-01T00:00:00Z"
+	dep.Spec.Template.Annotations[RestartedAtAnnotation] = sentinelRestartedAt
+
+	lookup.roleARN = ""
+	lookup.err = podidentity.ErrNoAssociation
+
+	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, exists := dep.Spec.Template.Annotations[RoleARNHashAnnotation]; exists {
+		t.Fatal("expected role arn hash annotation to be removed when association is deleted")
+	}
+	restartedAfterRemoval := dep.Spec.Template.Annotations[RestartedAtAnnotation]
+	if restartedAfterRemoval == "" || restartedAfterRemoval == sentinelRestartedAt {
+		t.Fatalf("expected restarted-at annotation to be updated on association removal, got %q", restartedAfterRemoval)
+	}
+
+	// Subsequent poll with still no association should be a no-op.
+	dep.Spec.Template.Annotations[RestartedAtAnnotation] = sentinelRestartedAt
+	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dep.Spec.Template.Annotations[RestartedAtAnnotation] != sentinelRestartedAt {
+		t.Fatal("expected restarted-at annotation to stay unchanged when association remains absent")
+	}
+
+	// Re-adding the same association should trigger another restart.
+	lookup.err = nil
+	lookup.roleARN = testRoleARN
+	if _, err := reloadIfRoleChanged(context.Background(), c, lookup, "cluster", 0, &deploymentWorkload{dep}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dep.Spec.Template.Annotations[RoleARNHashAnnotation] != initialHash {
+		t.Fatalf("expected role arn hash annotation %q to be restored, got %q", initialHash, dep.Spec.Template.Annotations[RoleARNHashAnnotation])
+	}
+	if dep.Spec.Template.Annotations[RestartedAtAnnotation] == sentinelRestartedAt {
+		t.Fatal("expected restarted-at annotation to be updated when association is re-added")
+	}
+}

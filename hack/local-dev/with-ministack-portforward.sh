@@ -21,10 +21,10 @@ trap 'kill "${PF_PID}" >/dev/null 2>&1 || true' EXIT
 
 log "Waiting for the port-forward to MiniStack to become ready..."
 for _ in $(seq 1 30); do
-	if curl -fsS "http://localhost:4566/_ministack/health" >/dev/null 2>&1; then
+	if curl -fsS "http://127.0.0.1:4566/_ministack/health" >/dev/null 2>&1; then
 		break
 	fi
 	sleep 1
 done
 
-AWS_ENDPOINT_URL="http://localhost:4566" "$@"
+AWS_ENDPOINT_URL="http://127.0.0.1:4566" "$@"

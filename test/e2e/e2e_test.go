@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -97,6 +98,12 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to set the controller-manager image")
 
+		By("waiting for the controller-manager rollout to complete")
+		cmd = exec.Command("kubectl", "-n", namespace, "rollout", "status",
+			fmt.Sprintf("deployment/%s", controllerDeploymentName), "--timeout=120s")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "The controller-manager rollout did not complete")
+
 		By("seeding MiniStack with a sample IAM role, EKS cluster, and Pod Identity Association")
 		cmd = exec.Command("hack/local-dev/with-ministack-portforward.sh", "hack/local-dev/seed-aws.sh")
 		_, err = utils.Run(cmd)
@@ -148,6 +155,28 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
 			} else {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
+			}
+
+			// The sample workload lives in sampleWorkloadNamespace, not
+			// namespace (the controller's own namespace), so it needs its
+			// own diagnostics dump to debug failures around it.
+			By("Fetching sample Deployment state")
+			cmd = exec.Command("kubectl", "get", "deployment", sampleDeploymentName,
+				"-n", sampleWorkloadNamespace, "-o", "yaml")
+			sampleDeploymentOutput, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Sample Deployment:\n%s", sampleDeploymentOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get sample Deployment: %s", err)
+			}
+
+			By("Fetching sample workload namespace events")
+			cmd = exec.Command("kubectl", "get", "events", "-n", sampleWorkloadNamespace, "--sort-by=.lastTimestamp")
+			sampleEventsOutput, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Sample workload namespace events:\n%s", sampleEventsOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get sample workload namespace events: %s", err)
 			}
 
 			By("Fetching curl-metrics logs")
@@ -335,9 +364,18 @@ var _ = Describe("Manager", Ordered, func() {
 
 // sampleDeploymentAnnotation returns the value of the given annotation on
 // the sample Deployment's pod template.
+//
+// Dots in key must be escaped: kubectl's JSONPath engine (k8s.io/client-go's
+// util/jsonpath) still splits on unescaped "." inside a bracket-quoted
+// key, so an expression like annotations['a.b/c'] is treated as a lookup
+// for the field "a" (not found) rather than the literal key "a.b/c". With
+// kubectl's default AllowMissingKeys behavior this fails silently, printing
+// an empty string instead of an error, which would otherwise be very hard
+// to notice.
 func sampleDeploymentAnnotation(key string) (string, error) {
+	escapedKey := strings.ReplaceAll(key, ".", `\.`)
 	cmd := exec.Command("kubectl", "get", "deployment", sampleDeploymentName, "-n", sampleWorkloadNamespace,
-		"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", key))
+		"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", escapedKey))
 	return utils.Run(cmd)
 }
 

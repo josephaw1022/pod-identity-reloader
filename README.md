@@ -10,7 +10,7 @@ rollout so pods pick up the new role automatically.
 
 ## Prerequisites
 
-- An **EKS cluster** with the [Pod Identity Agent](https://docs.aws.amazon.com/eks/latest/userguide/pod-identity-agent-setup.html)
+- An **EKS cluster** with the [Pod Identity Agent](https://docs.aws.amazon.com/eks/latest/userguide/pod-id-agent-setup.html)
   add-on installed.
 - Workloads must use **EKS Pod Identity Associations** (not IRSA) to bind an
   IAM role to a ServiceAccount.

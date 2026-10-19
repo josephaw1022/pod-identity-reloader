@@ -1,5 +1,8 @@
 # pod-identity-reloader
 
+> [!WARNING]
+> This project is in its early stages of development and is **not production ready**. APIs, annotations, configuration, and behaviors are subject to change.
+
 A [stakater/Reloader](https://github.com/stakater/Reloader)-style Kubernetes
 operator, but for **AWS IAM roles instead of ConfigMaps/Secrets**.
 

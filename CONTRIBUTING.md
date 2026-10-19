@@ -116,10 +116,14 @@ restore them after regenerating.
 
 ## Releasing
 
-- Pushing to `main` or a version tag triggers the `Publish image` workflow,
-  which builds and pushes the manager image to GHCR.
-- Pushing a version tag triggers the `Publish Helm chart` workflow, which
-  packages and publishes the chart to GHCR as an OCI artifact.
+- Triggering the `Release` workflow manually (`workflow_dispatch`) cuts a
+  date-based release using the current UTC date (`vYYYY-MM-DD`, or
+  `vYYYY-MM-DD-1`, `vYYYY-MM-DD-2`, etc. if a release already exists for that
+  date). It builds and pushes the versioned manager image to GHCR, packages
+  and publishes the OCI Helm chart to GHCR, and creates a GitHub Release with
+  generated release notes and `dist/install.yaml` attached.
+- Pushing to `main` triggers the `Publish image` and `Publish Helm chart`
+  workflows for commit-SHA builds.
 
 ## Submitting changes
 
